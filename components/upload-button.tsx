@@ -53,6 +53,72 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
     }
   };
 
+  const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    console.log('Files selected:', files.length);
+    
+    // 获取文件夹路径
+    const folderPath = files[0].webkitRelativePath.split('/')[0];
+    console.log('Folder name:', folderPath);
+
+    try {
+      setIsUploading(true);
+      
+      // 先创建根文件夹
+      await r2Api.createFolder(folderPath);
+
+      // 上传所有文件
+      for (const file of Array.from(files)) {
+        const relativePath = file.webkitRelativePath;
+        console.log('Uploading:', relativePath);
+        
+        // 确保文件的父文件夹存在
+        const pathParts = relativePath.split('/');
+        pathParts.pop(); // 移除文件名
+        let currentPath = '';
+        
+        // 创建所有必要的文件夹
+        for (const part of pathParts) {
+          currentPath += part + '/';
+          try {
+            await r2Api.createFolder(currentPath.slice(0, -1));
+          } catch (error) {
+            console.log('Folder might already exist:', currentPath);
+          }
+        }
+
+        // 上传文件
+        await r2Api.uploadFile(file, (progress) => {
+          toast({
+            title: `Uploading ${file.name}`,
+            description: `Progress: ${Math.round(progress)}%`,
+            duration: Infinity,
+          });
+        }, pathParts.join('/') + '/');
+      }
+
+      await onUploadComplete();
+      
+      toast({
+        title: "Folder upload complete",
+        description: `${folderPath} has been uploaded`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Folder upload error:', error);
+      toast({
+        title: "Folder upload failed",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="fixed bottom-6 right-6">
       <DropdownMenu>
@@ -77,7 +143,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
             const input = document.createElement('input');
             input.type = 'file';
             input.webkitdirectory = true;
-            input.onchange = (e) => handleFileUpload((e.target as HTMLInputElement).files);
+            input.onchange = (e) => handleFolderUpload(e as React.ChangeEvent<HTMLInputElement>);
             input.click();
           }}>
             <FolderUp className="mr-2 h-4 w-4" />

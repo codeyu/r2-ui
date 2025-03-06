@@ -58,7 +58,7 @@ export function FileList({ viewMode, searchQuery, files }: FileListProps) {
       <div className="container p-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filteredFiles.map((file) => (
-            <Card key={file.id} className="overflow-hidden">
+            <Card key={file.name} className="overflow-hidden">
               <CardContent className="p-4 flex flex-col items-center justify-center pt-6">
                 {getFileIcon(file)}
                 <div className="mt-2 text-center">
@@ -103,7 +103,7 @@ export function FileList({ viewMode, searchQuery, files }: FileListProps) {
         </TableHeader>
         <TableBody>
           {filteredFiles.map((file) => (
-            <TableRow key={file.id}>
+            <TableRow key={file.name}>
               <TableCell className="font-medium">
                 <div className="flex items-center gap-2">
                   {getFileIcon(file)}

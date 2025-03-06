@@ -71,7 +71,8 @@ export const r2Api = {
   },
 
   // 上传文件
-  async uploadFile(file: File, onProgress?: (progress: number) => void) {
+  async uploadFile(file: File, onProgress?: (progress: number) => void, parentPath: string = '') {
+    const filePath = `${parentPath}${file.name}`;
     // 检查是否支持分片上传
     const supportMpu = await r2ApiRequest({
       method: 'GET',
@@ -84,7 +85,7 @@ export const r2Api = {
 
     await r2ApiRequest({
       method: 'PUT',
-      path: `/${file.name}`,
+      path: `/${filePath}`,
       body: file,
       headers: {
         'Content-Type': file.type || 'application/octet-stream',
@@ -175,6 +176,82 @@ export const r2Api = {
       },
     });
     return true;
+  },
+
+  // 添加上传文件夹的方法
+  async uploadFolder(folder: FileSystemDirectoryEntry, parentPath: string = ''): Promise<boolean> {
+    try {
+      // 创建当前文件夹
+      const folderPath = `${parentPath}${folder.name}/`;
+      console.log('Creating folder:', folderPath);
+      await this.createFolder(folderPath.replace(/^\//, '')); // 移除开头的斜杠
+
+      // 读取文件夹内容
+      console.log('Reading directory entries for:', folder.name);
+      const entries = await this.readDirectoryEntries(folder);
+      console.log('Found entries:', entries.length);
+      
+      for (const entry of entries) {
+        if (entry.isFile) {
+          // 处理文件
+          console.log('Processing file:', entry.name);
+          const file = await this.fileEntryToFile(entry as FileSystemFileEntry);
+          console.log('Uploading file:', file.name, 'to path:', folderPath);
+          await this.uploadFile(file, undefined, folderPath);
+        } else if (entry.isDirectory) {
+          // 递归处理子文件夹
+          console.log('Processing subfolder:', entry.name);
+          await this.uploadFolder(entry as FileSystemDirectoryEntry, folderPath);
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error('Upload folder error:', error);
+      throw error;
+    }
+  },
+
+  // 辅助方法：读取目录内容
+  async readDirectoryEntries(dirEntry: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
+    return new Promise((resolve, reject) => {
+      const entries: FileSystemEntry[] = [];
+      const reader = dirEntry.createReader();
+      
+      function readEntries() {
+        reader.readEntries((results) => {
+          console.log('Read entries batch:', results.length);
+          if (results.length === 0) {
+            console.log('Finished reading directory, total entries:', entries.length);
+            resolve(entries);
+          } else {
+            entries.push(...results);
+            readEntries(); // 继续读取，直到没有更多条目
+          }
+        }, (error) => {
+          console.error('Error reading entries:', error);
+          reject(error);
+        });
+      }
+      
+      readEntries();
+    });
+  },
+
+  // 辅助方法：将 FileEntry 转换为 File
+  async fileEntryToFile(fileEntry: FileSystemFileEntry): Promise<File> {
+    return new Promise((resolve, reject) => {
+      console.log('Converting FileEntry to File:', fileEntry.name);
+      fileEntry.file(
+        (file) => {
+          console.log('Successfully converted to File:', file.name);
+          resolve(file);
+        },
+        (error) => {
+          console.error('Error converting to File:', error);
+          reject(error);
+        }
+      );
+    });
   },
 };
 
