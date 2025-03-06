@@ -1,6 +1,7 @@
 "use client"
 
-import { File, Folder, MoreVertical, FileText, Image, FileArchive } from "lucide-react"
+import { useState } from "react"
+import { File, Folder, MoreVertical, FileText, Image, FileArchive, ChevronLeft } from "lucide-react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -14,9 +15,42 @@ interface FileListProps {
 }
 
 export function FileList({ viewMode, searchQuery, files }: FileListProps) {
-  const filteredFiles = files.filter((file) =>
+  const [currentPath, setCurrentPath] = useState<string>("");
+
+  // 获取当前路径下的文件和文件夹
+  const getCurrentFiles = () => {
+    return files.filter(file => {
+      // 如果是根目录
+      if (!currentPath) {
+        // 只显示根目录的文件和文件夹（不包含中间斜杠的项目）
+        return !file.name.slice(0, -1).includes('/');
+      }
+      
+      // 如果是子目录
+      const filePath = file.name.substring(0, file.name.lastIndexOf('/') || file.name.length);
+      return filePath === currentPath;
+    }).map(file => ({
+      ...file,
+      name: file.name.endsWith('/') ? file.name.slice(0, -1).split('/').pop() || file.name : file.name.split('/').pop() || file.name
+    }));
+  };
+
+  const filteredFiles = getCurrentFiles().filter((file) =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  );
+
+  // 处理文件夹双击
+  const handleFolderDoubleClick = (folderName: string) => {
+    const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+    setCurrentPath(newPath);
+  };
+
+  // 返回上级目录
+  const handleBackClick = () => {
+    const lastSlashIndex = currentPath.lastIndexOf('/');
+    const newPath = lastSlashIndex === -1 ? "" : currentPath.substring(0, lastSlashIndex);
+    setCurrentPath(newPath);
+  };
 
   if (files.length === 0) {
     return (
@@ -56,9 +90,23 @@ export function FileList({ viewMode, searchQuery, files }: FileListProps) {
   if (viewMode === "grid") {
     return (
       <div className="container p-4">
+        {currentPath && (
+          <Button
+            variant="ghost"
+            className="mb-4"
+            onClick={handleBackClick}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            戻る
+          </Button>
+        )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filteredFiles.map((file) => (
-            <Card key={file.name} className="overflow-hidden">
+            <Card 
+              key={file.name} 
+              className="overflow-hidden"
+              onDoubleClick={() => file.type === "folder" && handleFolderDoubleClick(file.name)}
+            >
               <CardContent className="p-4 flex flex-col items-center justify-center pt-6">
                 {getFileIcon(file)}
                 <div className="mt-2 text-center">
@@ -92,6 +140,16 @@ export function FileList({ viewMode, searchQuery, files }: FileListProps) {
 
   return (
     <div className="container p-4">
+      {currentPath && (
+        <Button
+          variant="ghost"
+          className="mb-4"
+          onClick={handleBackClick}
+        >
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          戻る
+        </Button>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
@@ -103,7 +161,11 @@ export function FileList({ viewMode, searchQuery, files }: FileListProps) {
         </TableHeader>
         <TableBody>
           {filteredFiles.map((file) => (
-            <TableRow key={file.name}>
+            <TableRow 
+              key={file.name}
+              onDoubleClick={() => file.type === "folder" && handleFolderDoubleClick(file.name)}
+              className={file.type === "folder" ? "cursor-pointer" : ""}
+            >
               <TableCell className="font-medium">
                 <div className="flex items-center gap-2">
                   {getFileIcon(file)}
