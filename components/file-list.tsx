@@ -5,15 +5,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-
-interface FileItem {
-  id: string
-  name: string
-  type: "file" | "folder"
-  size?: string
-  modified: string
-  fileType?: "document" | "image" | "archive" | "other"
-}
+import { FileItem } from "@/lib/r2Api"
 
 interface FileListProps {
   viewMode: "grid" | "list"
@@ -22,7 +14,29 @@ interface FileListProps {
 }
 
 export function FileList({ viewMode, searchQuery, files }: FileListProps) {
-  const filteredFiles = files.filter((file) => file.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredFiles = files.filter((file) =>
+    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  if (files.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <File className="h-12 w-12 mb-4" />
+        <p className="text-lg">ファイルがありません</p>
+        <p className="text-sm">右下のボタンからファイルをアップロードしてください</p>
+      </div>
+    )
+  }
+
+  if (filteredFiles.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <File className="h-12 w-12 mb-4" />
+        <p className="text-lg">検索結果がありません</p>
+        <p className="text-sm">検索条件を変更してお試しください</p>
+      </div>
+    )
+  }
 
   const getFileIcon = (file: FileItem) => {
     if (file.type === "folder") return <Folder className="h-8 w-8 text-blue-500" />

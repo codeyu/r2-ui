@@ -10,7 +10,9 @@ import { AboutModal } from "@/components/about-modal"
 import { AddEndpointModal } from "@/components/add-endpoint-modal"
 import { NewFileModal } from "@/components/new-file-modal"
 import { NewFolderModal } from "@/components/new-folder-modal"
-import { v4 as uuidv4 } from "uuid"
+import { r2Api } from "@/lib/r2Api"
+import { FileItem } from "@/lib/r2Api"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -20,7 +22,8 @@ export default function Home() {
   const [isAddEndpointOpen, setIsAddEndpointOpen] = useState(false)
   const [isNewFileOpen, setIsNewFileOpen] = useState(false)
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false)
-  const [files, setFiles] = useState<any[]>([])
+  const [files, setFiles] = useState<FileItem[]>([])
+  const { toast } = useToast()
 
   // ページロード時に R2 エンドポイントの存在をチェック
   useEffect(() => {
@@ -30,62 +33,24 @@ export default function Home() {
       // エンドポイントが存在しない場合、追加モーダルを表示
       if (!storedEndpoints || JSON.parse(storedEndpoints).length === 0) {
         setIsAddEndpointOpen(true)
-      }
-
-      // ファイルリストの読み込み
-      const storedFiles = localStorage.getItem("fileList")
-      if (storedFiles) {
-        try {
-          setFiles(JSON.parse(storedFiles))
-        } catch (e) {
-          console.error("Failed to parse stored files", e)
-        }
       } else {
-        // サンプルデータ
-        const sampleFiles = [
-          { id: "1", name: "ドキュメント", type: "folder", modified: "2023-10-15" },
-          { id: "2", name: "画像", type: "folder", modified: "2023-10-14" },
-          { id: "3", name: "プロジェクト", type: "folder", modified: "2023-10-13" },
-          {
-            id: "4",
-            name: "レポート.docx",
-            type: "file",
-            size: "245 KB",
-            modified: "2023-10-12",
-            fileType: "document",
-          },
-          {
-            id: "5",
-            name: "プレゼンテーション.pptx",
-            type: "file",
-            size: "1.2 MB",
-            modified: "2023-10-11",
-            fileType: "document",
-          },
-          {
-            id: "6",
-            name: "スクリーンショット.png",
-            type: "file",
-            size: "450 KB",
-            modified: "2023-10-10",
-            fileType: "image",
-          },
-          {
-            id: "7",
-            name: "バックアップ.zip",
-            type: "file",
-            size: "3.5 MB",
-            modified: "2023-10-09",
-            fileType: "archive",
-          },
-          { id: "8", name: "メモ.txt", type: "file", size: "12 KB", modified: "2023-10-08", fileType: "document" },
-        ]
-        setFiles(sampleFiles)
-        localStorage.setItem("fileList", JSON.stringify(sampleFiles))
+        // エンドポイントが存在する場合、ファイルリストを取得
+        loadFiles()
       }
     }
   }, [])
-
+  const loadFiles = async () => {
+    try {
+      const fileList = await r2Api.listFiles()
+      setFiles(Array.isArray(fileList) ? fileList : [])
+    } catch (error) {
+      toast({
+        title: "Failed to load files",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      })
+    }
+  }
   // 新しいエンドポイントが追加された時の処理
   const handleAddEndpoint = (endpoint: any, setAsActive: boolean) => {
     // 既存のエンドポイントを取得
@@ -113,40 +78,43 @@ export default function Home() {
   }
 
   // 新規ファイル作成
-  const handleCreateFile = (fileName: string, extension: string) => {
-    const now = new Date()
-    const formattedDate = now.toISOString().split("T")[0]
-
-    const newFile = {
-      id: uuidv4(),
-      name: `${fileName}.${extension}`,
-      type: "file",
-      size: "0 KB",
-      modified: formattedDate,
-      fileType: extension === "md" ? "document" : "document",
-      content: "",
+  const handleCreateFile = async (fileName: string, extension: string) => {
+    try {
+      await r2Api.createFile(fileName, extension);
+      await loadFiles(); // 重新加载文件列表
+      toast({
+        title: "File created",
+        description: `${fileName}.${extension} has been created`,
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to create file",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
-
-    const updatedFiles = [...files, newFile]
-    setFiles(updatedFiles)
-    localStorage.setItem("fileList", JSON.stringify(updatedFiles))
   }
 
   // 新規フォルダ作成
-  const handleCreateFolder = (folderName: string) => {
-    const now = new Date()
-    const formattedDate = now.toISOString().split("T")[0]
-
-    const newFolder = {
-      id: uuidv4(),
-      name: folderName,
-      type: "folder",
-      modified: formattedDate,
+  const handleCreateFolder = async (folderName: string) => {
+    try {
+      await r2Api.createFolder(folderName);
+      await loadFiles(); // 重新加载文件列表
+      toast({
+        title: "Folder created",
+        description: `${folderName} has been created`,
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to create folder",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
-
-    const updatedFiles = [...files, newFolder]
-    setFiles(updatedFiles)
-    localStorage.setItem("fileList", JSON.stringify(updatedFiles))
   }
 
   return (
@@ -163,7 +131,7 @@ export default function Home() {
         />
         <div className="flex-1 relative">
           <FileList viewMode={viewMode} searchQuery={searchQuery} files={files} />
-          <UploadButton />
+          <UploadButton onUploadComplete={loadFiles} />
         </div>
       </main>
 
