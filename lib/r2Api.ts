@@ -142,77 +142,98 @@ export const r2Api = {
 
   // 分片上传
   async multipartUpload(file: File, onProgress?: (progress: number) => void, signal?: AbortSignal) {
+    let uploadId: string | undefined;
+    
     try {
-      // 如果已经取消，直接退出
+      // 初始化前检查信号状态
       if (signal?.aborted) {
-        throw new Error('Upload aborted');
+        throw new Error('Upload aborted before initialization');
       }
-
+      
       // 初始化分片上传
       const initResponse = await r2ApiRequest({
         method: 'POST',
         path: `/mpu/create/${file.name}`,
-        signal, // 添加 signal
+        signal,
       });
-      const { uploadId } = await initResponse.json();
-
+      const initData = await initResponse.json();
+      uploadId = initData.uploadId;
+  
       const chunkSize = 5 * 1024 * 1024; // 5MB
       const chunks = Math.ceil(file.size / chunkSize);
       const parts: { ETag: string, PartNumber: number }[] = [];
-
-      // 上传分片
+  
+      // 上传所有分片 - 使用更细粒度的检查
       for (let i = 1; i <= chunks; i++) {
-        // 检查是否已取消
+        // 每个分片上传前检查信号状态
         if (signal?.aborted) {
-          // 尝试中止多部分上传
-          try {
-            await r2ApiRequest({
-              method: 'DELETE',
-              path: `/mpu/${file.name}?uploadId=${uploadId}`,
-            });
-          } catch (error) {
-            console.warn('Failed to abort multipart upload:', error);
-          }
-          throw new Error('Upload aborted');
+          throw new Error('Upload aborted during chunk preparation');
         }
-
+        
         const start = (i - 1) * chunkSize;
         const end = Math.min(start + chunkSize, file.size);
         const chunk = file.slice(start, end);
-
-        const partResponse = await r2ApiRequest({
-          method: 'PUT',
-          path: `/mpu/${file.name}?partNumber=${i}&uploadId=${uploadId}`,
-          body: chunk,
-          signal, // 添加 signal
-        });
-        
-        const { ETag } = await partResponse.json();
-        parts.push({ 
-          ETag, 
-          PartNumber: i 
-        });
-
-        if (onProgress) {
-          onProgress((i / chunks) * 100);
+  
+        try {
+          // 上传分片
+          const partResponse = await r2ApiRequest({
+            method: 'PUT',
+            path: `/mpu/${file.name}?partNumber=${i}&uploadId=${uploadId}`,
+            body: chunk,
+            signal,
+          });
+          
+          // 分片上传后再次检查信号状态
+          if (signal?.aborted) {
+            throw new Error('Upload aborted after chunk upload');
+          }
+          
+          const { ETag } = await partResponse.json();
+          parts.push({ ETag, PartNumber: i });
+          
+          if (onProgress) {
+            onProgress((i / chunks) * 100);
+          }
+        } catch (error) {
+          if (error.name === 'AbortError' || signal?.aborted) {
+            throw new Error('Upload aborted during chunk upload');
+          }
+          throw new Error(`Failed to upload part ${i}: ${error.message}`);
         }
       }
-
+  
+      // 完成前最后检查一次信号状态
+      if (signal?.aborted) {
+        throw new Error('Upload aborted before completion');
+      }
+      
       // 完成分片上传
       await r2ApiRequest({
         method: 'POST',
         path: `/mpu/complete/${file.name}?uploadId=${uploadId}`,
         body: JSON.stringify({ parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }),
-        signal, // 添加 signal
+        signal,
       });
-
+  
       return true;
     } catch (error) {
-      // 如果是取消操作，转换错误类型
-      if (signal?.aborted || error.name === 'AbortError') {
+      // 任何错误或中止情况下，只要有uploadId就尝试清理
+      if (uploadId) {
+        try {
+          // 注意：这里不传递signal，确保清理请求不会被取消
+          await r2ApiRequest({
+            method: 'DELETE',
+            path: `/mpu/${file.name}?uploadId=${uploadId}`,
+          });
+          console.log('Multipart upload resource cleaned up');
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup multipart upload:', cleanupError);
+        }
+      }
+      
+      if (error.name === 'AbortError' || signal?.aborted) {
         throw new Error('Upload aborted');
       }
-      console.error('Multipart upload error:', error);
       throw error;
     }
   },
