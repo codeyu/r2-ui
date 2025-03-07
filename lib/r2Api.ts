@@ -7,7 +7,7 @@ interface R2ApiOptions {
   headers?: Record<string, string>;
 }
 
-async function r2ApiRequest({ method, path, body, headers = {} }: R2ApiOptions) {
+async function r2ApiRequest({ method, path, body, headers = {}, signal }: R2ApiOptions & { signal?: AbortSignal }) {
   const endpoint = getActiveEndpoint();
   if (!endpoint) {
     throw new Error('No active R2 endpoint configured');
@@ -24,6 +24,7 @@ async function r2ApiRequest({ method, path, body, headers = {} }: R2ApiOptions) 
         ...headers,
       },
       body,
+      signal,
     });
 
     if (!response.ok) {
@@ -71,7 +72,12 @@ export const r2Api = {
   },
 
   // 上传文件
-  async uploadFile(file: File, onProgress?: (progress: number) => void, parentPath: string = '') {
+  async uploadFile(
+    file: File, 
+    onProgress?: (progress: number) => void,
+    parentPath: string = '',
+    signal?: AbortSignal
+  ) {
     const filePath = `${parentPath}${file.name}`;
     // 检查是否支持分片上传
     const supportMpu = await r2ApiRequest({
@@ -90,6 +96,7 @@ export const r2Api = {
       headers: {
         'Content-Type': file.type || 'application/octet-stream',
       },
+      signal,
     });
     return true;
   },

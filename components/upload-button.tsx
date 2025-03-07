@@ -1,11 +1,12 @@
 "use client"
 
-import { Upload, FileUp, FolderUp } from "lucide-react"
+import { Upload, FileUp, FolderUp, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/components/ui/use-toast"
 import { r2Api } from "@/lib/r2Api"
-import { useState } from "react"
+import { useState, useRef } from "react"
+import { cn } from "@/lib/utils"
 
 interface UploadButtonProps {
   onUploadComplete: () => Promise<void>;
@@ -14,17 +15,35 @@ interface UploadButtonProps {
 export function UploadButton({ onUploadComplete }: UploadButtonProps) {
   const { toast } = useToast()
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setIsUploading(false)
+      setUploadProgress(0)
+      toast({
+        title: "Upload cancelled",
+        description: "The upload has been cancelled",
+        duration: 3000,
+      })
+    }
+  }
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
+    setUploadProgress(0);
     try {
       for (const file of Array.from(files)) {
         console.log('Starting upload for:', file.name);
         
         await r2Api.uploadFile(file, (progress) => {
           console.log(`Upload progress for ${file.name}:`, progress);
+          setUploadProgress(progress);
           toast({
             title: `Uploading ${file.name}`,
             description: `Progress: ${Math.round(progress)}%`,
@@ -50,6 +69,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
       });
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -65,6 +85,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
 
     try {
       setIsUploading(true);
+      setUploadProgress(0);
       
       // 先创建根文件夹
       await r2Api.createFolder(folderPath);
@@ -91,6 +112,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
 
         // 上传文件
         await r2Api.uploadFile(file, (progress) => {
+          setUploadProgress(progress);
           toast({
             title: `Uploading ${file.name}`,
             description: `Progress: ${Math.round(progress)}%`,
@@ -116,6 +138,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
       });
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -123,9 +146,60 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
     <div className="fixed bottom-6 right-6">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="icon" className="h-14 w-14 rounded-full shadow-lg" disabled={isUploading}>
-            <Upload className="h-6 w-6" />
-            <span className="sr-only">アップロード</span>
+          <Button 
+            size="icon" 
+            className={cn(
+              "h-14 w-14 rounded-full shadow-lg relative",
+              isUploading && "animate-pulse"
+            )}
+            onClick={(e) => {
+              if (isUploading) {
+                e.preventDefault()
+                handleCancel()
+              }
+            }}
+          >
+            {isUploading ? (
+              <>
+                <svg
+                  className="absolute inset-0 -rotate-90"
+                  viewBox="0 0 100 100"
+                >
+                  <circle
+                    className="text-muted-foreground/20"
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    strokeWidth="10"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <circle
+                    className="text-primary transition-all duration-300"
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    strokeWidth="10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 45}`}
+                    strokeDashoffset={`${2 * Math.PI * 45 * (1 - uploadProgress / 100)}`}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-sm font-medium mb-1">
+                    {Math.round(uploadProgress)}%
+                  </span>
+                  <X className="h-4 w-4" /> {/* 取消图标 */}
+                </div>
+              </>
+            ) : (
+              <Upload className="h-6 w-6" />
+            )}
+            <span className="sr-only">
+              {isUploading ? "キャンセル" : "アップロード"}
+            </span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -133,10 +207,51 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
             const input = document.createElement('input');
             input.type = 'file';
             input.multiple = true;
-            input.onchange = (e) => handleFileUpload((e.target as HTMLInputElement).files);
+            input.onchange = async (e) => {
+              const files = (e.target as HTMLInputElement).files;
+              if (!files || files.length === 0) return;
+
+              setIsUploading(true);
+              setUploadProgress(0);
+              abortControllerRef.current = new AbortController();
+
+              try {
+                for (const file of Array.from(files)) {
+                  await r2Api.uploadFile(
+                    file, 
+                    (progress) => {
+                      setUploadProgress(progress);
+                    },
+                    undefined,
+                    abortControllerRef.current.signal
+                  );
+                }
+                
+                await onUploadComplete();
+                
+                toast({
+                  title: "Upload complete",
+                  description: "Files have been uploaded successfully",
+                  duration: 3000,
+                });
+              } catch (error) {
+                if (error.name === 'AbortError') {
+                  return; // 已经显示了取消提示，不需要显示错误
+                }
+                toast({
+                  title: "Upload failed",
+                  description: error instanceof Error ? error.message : "An error occurred",
+                  variant: "destructive",
+                  duration: 5000,
+                });
+              } finally {
+                setIsUploading(false);
+                setUploadProgress(0);
+                abortControllerRef.current = null;
+              }
+            };
             input.click();
           }}>
-            <FileUp className="mr-2 h-4 w-4" />
             <span>ファイルをアップロード</span>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => {
