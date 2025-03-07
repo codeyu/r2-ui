@@ -181,7 +181,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
         <Button 
           size="icon" 
           className={cn(
-            "h-14 w-14 rounded-full shadow-lg relative",
+            "h-14 w-14 rounded-full shadow-lg relative cursor-pointer",
             "animate-pulse"
           )}
           onClick={(e) => {
@@ -190,30 +190,31 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
           }}
         >
           <svg
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full -rotate-90"
             viewBox="0 0 100 100"
-            xmlns="http://www.w3.org/2000/svg"
           >
+            {/* 背景圆环 */}
             <circle
               className="text-muted-foreground/20"
               cx="50"
               cy="50"
-              r="40"
-              strokeWidth="8"
+              r="45"  // 调整半径
+              strokeWidth="6"  // 调整线宽
               fill="none"
               stroke="currentColor"
             />
+            {/* 进度圆环 */}
             <circle
-              className="text-primary transition-all duration-300"
+              className="text-primary transition-all duration-300 ease-in-out"
               cx="50"
               cy="50"
-              r="40"
-              strokeWidth="8"
+              r="45"  // 调整半径，与背景圆环相同
+              strokeWidth="6"  // 调整线宽，与背景圆环相同
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 40}`}
-              strokeDashoffset={`${2 * Math.PI * 40 * (1 - uploadProgress / 100)}`}
+              strokeDasharray={`${2 * Math.PI * 45}`}
+              strokeDashoffset={`${2 * Math.PI * 45 * (1 - uploadProgress / 100)}`}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -227,7 +228,7 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg">
+            <Button size="icon" className="h-14 w-14 rounded-full shadow-lg cursor-pointer">
               <Upload className="h-6 w-6" />
               <span className="sr-only">アップロード</span>
             </Button>
@@ -265,7 +266,12 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
                     duration: 3000,
                   });
                 } catch (error) {
-                  if (error.name === 'AbortError') {
+                  if (error.name === 'AbortError' || error.message === 'Upload aborted') {
+                    toast({
+                      title: "Upload cancelled",
+                      description: "The upload has been cancelled",
+                      duration: 3000,
+                    });
                     return;
                   }
                   toast({
