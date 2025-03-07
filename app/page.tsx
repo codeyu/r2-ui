@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Header } from "@/components/header"
 import { Toolbar } from "@/components/toolbar"
 import { FileList } from "@/components/file-list"
@@ -23,34 +23,35 @@ export default function Home() {
   const [isNewFileOpen, setIsNewFileOpen] = useState(false)
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false)
   const [files, setFiles] = useState<FileItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
 
-  // ページロード時に R2 エンドポイントの存在をチェック
+  const fetchFiles = useCallback(async () => {
+    console.log('Fetching files...') // 添加日志
+    try {
+      setIsLoading(true)
+      const data = await r2Api.listFiles()
+      setFiles(data)
+    } catch (error) {
+      console.error('Failed to fetch files:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+  
+  // 检查 R2 端点并获取文件列表
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedEndpoints = localStorage.getItem("r2Endpoints")
 
-      // エンドポイントが存在しない場合、追加モーダルを表示
       if (!storedEndpoints || JSON.parse(storedEndpoints).length === 0) {
         setIsAddEndpointOpen(true)
       } else {
-        // エンドポイントが存在する場合、ファイルリストを取得
-        loadFiles()
+        fetchFiles()
       }
     }
-  }, [])
-  const loadFiles = async () => {
-    try {
-      const fileList = await r2Api.listFiles()
-      setFiles(Array.isArray(fileList) ? fileList : [])
-    } catch (error) {
-      toast({
-        title: "Failed to load files",
-        description: error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      })
-    }
-  }
+  }, []) // 移除 fetchFiles 依赖，只在组件挂载时执行一次
+
   // 新しいエンドポイントが追加された時の処理
   const handleAddEndpoint = (endpoint: any, setAsActive: boolean) => {
     // 既存のエンドポイントを取得
@@ -81,7 +82,7 @@ export default function Home() {
   const handleCreateFile = async (fileName: string, extension: string) => {
     try {
       await r2Api.createFile(fileName, extension);
-      await loadFiles(); // 重新加载文件列表
+      await fetchFiles(); // 重新加载文件列表
       toast({
         title: "File created",
         description: `${fileName}.${extension} has been created`,
@@ -101,7 +102,7 @@ export default function Home() {
   const handleCreateFolder = async (folderName: string) => {
     try {
       await r2Api.createFolder(folderName);
-      await loadFiles(); // 重新加载文件列表
+      await fetchFiles(); // 重新加载文件列表
       toast({
         title: "Folder created",
         description: `${folderName} has been created`,
@@ -130,8 +131,8 @@ export default function Home() {
           onNewFolderClick={() => setIsNewFolderOpen(true)}
         />
         <div className="flex-1 relative">
-          <FileList viewMode={viewMode} searchQuery={searchQuery} files={files} />
-          <UploadButton onUploadComplete={loadFiles} />
+          <FileList viewMode={viewMode} searchQuery={searchQuery} files={files} onRefresh={fetchFiles} />
+          <UploadButton onUploadComplete={fetchFiles} />
         </div>
       </main>
 

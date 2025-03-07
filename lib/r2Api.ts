@@ -54,21 +54,29 @@ export interface FileItem {
 
 export const r2Api = {
   // 获取文件列表
-  async listFiles(): Promise<FileItem[]> {
-    const response = await r2ApiRequest({
-      method: 'PATCH',
-      path: '/',
-    });
-    const data = await response.json();
-    
-    // 转换 API 返回的数据格式
-    return data.objects?.map((obj: any) => ({
-      name: obj.key,
-      type: obj.httpMetadata?.contentType === "application/x-directory" ? "folder" : "file",
-      size: obj.httpMetadata?.contentType === "application/x-directory" ? "-" : formatFileSize(obj.size),
-      modified: new Date(obj.uploaded).toLocaleString(),
-      fileType: getFileType(obj.httpMetadata?.contentType)
-    })) || [];
+  async listFiles(signal?: AbortSignal): Promise<FileItem[]> {
+    try {
+      const response = await r2ApiRequest({
+        method: 'PATCH',
+        path: '/',
+        signal, // 添加 signal 参数
+      });
+      const data = await response.json();
+      
+      return data.objects?.map((obj: any) => ({
+        name: obj.key,
+        type: obj.httpMetadata?.contentType === "application/x-directory" ? "folder" : "file",
+        size: obj.httpMetadata?.contentType === "application/x-directory" ? "-" : formatFileSize(obj.size),
+        modified: new Date(obj.uploaded).toLocaleString(),
+        fileType: getFileType(obj.httpMetadata?.contentType)
+      })) || [];
+    } catch (error) {
+      // 如果是取消操作，静默处理
+      if (error.name === 'AbortError') {
+        return [];
+      }
+      throw error;
+    }
   },
 
   // 上传文件
@@ -133,12 +141,18 @@ export const r2Api = {
   },
 
   // 分片上传
-  async multipartUpload(file: File, onProgress?: (progress: number) => void) {
+  async multipartUpload(file: File, onProgress?: (progress: number) => void, signal?: AbortSignal) {
     try {
+      // 如果已经取消，直接退出
+      if (signal?.aborted) {
+        throw new Error('Upload aborted');
+      }
+
       // 初始化分片上传
       const initResponse = await r2ApiRequest({
         method: 'POST',
         path: `/mpu/create/${file.name}`,
+        signal, // 添加 signal
       });
       const { uploadId } = await initResponse.json();
 
@@ -147,7 +161,21 @@ export const r2Api = {
       const parts: { ETag: string, PartNumber: number }[] = [];
 
       // 上传分片
-      for (let i = 1; i <= chunks; i++) { // 从1开始
+      for (let i = 1; i <= chunks; i++) {
+        // 检查是否已取消
+        if (signal?.aborted) {
+          // 尝试中止多部分上传
+          try {
+            await r2ApiRequest({
+              method: 'DELETE',
+              path: `/mpu/${file.name}?uploadId=${uploadId}`,
+            });
+          } catch (error) {
+            console.warn('Failed to abort multipart upload:', error);
+          }
+          throw new Error('Upload aborted');
+        }
+
         const start = (i - 1) * chunkSize;
         const end = Math.min(start + chunkSize, file.size);
         const chunk = file.slice(start, end);
@@ -156,6 +184,7 @@ export const r2Api = {
           method: 'PUT',
           path: `/mpu/${file.name}?partNumber=${i}&uploadId=${uploadId}`,
           body: chunk,
+          signal, // 添加 signal
         });
         
         const { ETag } = await partResponse.json();
@@ -173,11 +202,16 @@ export const r2Api = {
       await r2ApiRequest({
         method: 'POST',
         path: `/mpu/complete/${file.name}?uploadId=${uploadId}`,
-        body: JSON.stringify({ parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }), // 确保分片顺序正确
+        body: JSON.stringify({ parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }),
+        signal, // 添加 signal
       });
 
       return true;
     } catch (error) {
+      // 如果是取消操作，转换错误类型
+      if (signal?.aborted || error.name === 'AbortError') {
+        throw new Error('Upload aborted');
+      }
       console.error('Multipart upload error:', error);
       throw error;
     }

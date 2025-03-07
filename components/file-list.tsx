@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { File, Folder, MoreVertical, FileText, Image, FileArchive, ChevronLeft } from "lucide-react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -12,10 +12,25 @@ interface FileListProps {
   viewMode: "grid" | "list"
   searchQuery: string
   files: FileItem[]
+  onRefresh: () => void
 }
 
-export function FileList({ viewMode, searchQuery, files }: FileListProps) {
+export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListProps) {
   const [currentPath, setCurrentPath] = useState<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController();
+
+    // 返回清理函数
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []); // 空依赖数组，只在组件挂载时执行
 
   // 获取当前路径下的文件和文件夹
   const getCurrentFiles = () => {
