@@ -134,45 +134,53 @@ export const r2Api = {
 
   // 分片上传
   async multipartUpload(file: File, onProgress?: (progress: number) => void) {
-    // 初始化分片上传
-    const initResponse = await r2ApiRequest({
-      method: 'POST',
-      path: `/mpu/create/${file.name}`,
-    });
-    const { uploadId } = await initResponse.json();
-
-    const chunkSize = 5 * 1024 * 1024; // 5MB
-    const chunks = Math.ceil(file.size / chunkSize);
-    const parts: { ETag: string, PartNumber: number }[] = [];
-
-    for (let i = 0; i < chunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, file.size);
-      const chunk = file.slice(start, end);
-      const partNumber = i + 1; // 分片编号从 1 开始
-
-      const partResponse = await r2ApiRequest({
-        method: 'PUT',
-        path: `/mpu/${file.name}?partNumber=${partNumber}&uploadId=${uploadId}`,
-        body: chunk,
+    try {
+      // 初始化分片上传
+      const initResponse = await r2ApiRequest({
+        method: 'POST',
+        path: `/mpu/create/${file.name}`,
       });
-      
-      const { ETag } = await partResponse.json();
-      parts.push({ ETag, PartNumber: partNumber }); // 使用正确的分片编号
+      const { uploadId } = await initResponse.json();
 
-      if (onProgress) {
-        onProgress((i + 1) / chunks * 100);
+      const chunkSize = 5 * 1024 * 1024; // 5MB
+      const chunks = Math.ceil(file.size / chunkSize);
+      const parts: { ETag: string, PartNumber: number }[] = [];
+
+      // 上传分片
+      for (let i = 1; i <= chunks; i++) { // 从1开始
+        const start = (i - 1) * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
+
+        const partResponse = await r2ApiRequest({
+          method: 'PUT',
+          path: `/mpu/${file.name}?partNumber=${i}&uploadId=${uploadId}`,
+          body: chunk,
+        });
+        
+        const { ETag } = await partResponse.json();
+        parts.push({ 
+          ETag, 
+          PartNumber: i 
+        });
+
+        if (onProgress) {
+          onProgress((i / chunks) * 100);
+        }
       }
+
+      // 完成分片上传
+      await r2ApiRequest({
+        method: 'POST',
+        path: `/mpu/complete/${file.name}?uploadId=${uploadId}`,
+        body: JSON.stringify({ parts: parts.sort((a, b) => a.PartNumber - b.PartNumber) }), // 确保分片顺序正确
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Multipart upload error:', error);
+      throw error;
     }
-
-    // 完成分片上传
-    await r2ApiRequest({
-      method: 'POST',
-      path: `/mpu/complete/${file.name}?uploadId=${uploadId}`,
-      body: JSON.stringify({ parts }),
-    });
-
-    return true;
   },
 
   // 删除文件
