@@ -72,33 +72,64 @@ export const r2Api = {
   },
 
   // 上传文件
-  async uploadFile(
-    file: File, 
-    onProgress?: (progress: number) => void,
-    parentPath: string = '',
-    signal?: AbortSignal
-  ) {
+  async uploadFile(file: File, onProgress?: (progress: number) => void, parentPath: string = '', signal?: AbortSignal) {
     const filePath = `${parentPath}${file.name}`;
+    
     // 检查是否支持分片上传
     const supportMpu = await r2ApiRequest({
       method: 'GET',
       path: '/support_mpu',
     }).then(() => true).catch(() => false);
 
-    if (supportMpu && file.size > 100 * 1024 * 1024) { // 大于100MB使用分片上传
+    if (supportMpu && file.size > 100 * 1024 * 1024) {
       return this.multipartUpload(file, onProgress);
     }
 
-    await r2ApiRequest({
-      method: 'PUT',
-      path: `/${filePath}`,
-      body: file,
-      headers: {
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      signal,
+    // 使用 XMLHttpRequest 来获取上传进度
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          const progress = (event.loaded / event.total) * 100;
+          onProgress(progress);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(true);
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Upload failed'));
+      };
+
+      xhr.onabort = () => {
+        reject(new Error('Upload aborted'));
+      };
+
+      // 获取当前的 endpoint
+      const endpoint = getActiveEndpoint();
+      if (!endpoint) {
+        reject(new Error('No active R2 endpoint configured'));
+        return;
+      }
+
+      xhr.open('PUT', `${endpoint.workerEndpointUrl}/${filePath}`);
+      xhr.setRequestHeader('X-API-Key', endpoint.workerEndpointApiKey);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      
+      // 监听取消信号
+      if (signal) {
+        signal.addEventListener('abort', () => xhr.abort());
+      }
+
+      xhr.send(file);
     });
-    return true;
   },
 
   // 分片上传
@@ -118,15 +149,16 @@ export const r2Api = {
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize, file.size);
       const chunk = file.slice(start, end);
+      const partNumber = i + 1; // 分片编号从 1 开始
 
       const partResponse = await r2ApiRequest({
         method: 'PUT',
-        path: `/mpu/${file.name}?partNumber=${i + 1}&uploadId=${uploadId}`,
+        path: `/mpu/${file.name}?partNumber=${partNumber}&uploadId=${uploadId}`,
         body: chunk,
       });
       
       const { ETag } = await partResponse.json();
-      parts.push({ ETag, PartNumber: i + 1 });
+      parts.push({ ETag, PartNumber: partNumber }); // 使用正确的分片编号
 
       if (onProgress) {
         onProgress((i + 1) / chunks * 100);
