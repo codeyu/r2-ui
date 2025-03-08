@@ -32,15 +32,68 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
     };
   }, []); // 空依赖数组，只在组件挂载时执行
 
+
+  /**
+   * 预处理文件列表，确保所有隐含的目录都被添加到列表中
+   * @param fileList 原始文件列表
+   * @returns 预处理后的文件列表，包含所有隐含的目录
+  */
+  function preprocessFileList(fileList: FileItem[]): FileItem[] {
+    const result = [...fileList]; // 复制原始列表
+    const directories = new Set<string>();
+    
+    // 提取所有隐含的目录路径
+    for (const file of fileList) {
+      const path = file.name;
+      const parts = path.split('/');
+      
+      // 如果路径包含目录部分
+      if (parts.length > 1) {
+        // 构建每一级目录路径
+        let dirPath = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          dirPath += parts[i] + '/';
+          directories.add(dirPath);
+        }
+      }
+    }
+    
+    // 检查哪些目录不在原始列表中
+    for (const dir of Array.from(directories)) {
+      // 检查目录是否已经在列表中
+      const exists = fileList.some(item => item.name === dir);
+      if (!exists) {
+        // 如果目录不存在，添加到结果中
+        result.push({
+          name: dir,
+          type: "folder",
+          modified: "",
+          size: "",
+          r2Type: "application/x-directory"
+        });
+      }
+    }
+    
+    return result;
+  }
+
+
+  /**
+   * 获取当前目录下的文件列表
+   * @returns 当前目录下的文件列表
+  */
   const getCurrentFiles = () => {
+    // 预处理文件列表，确保所有目录都被包含
+    const fileList = preprocessFileList(files);
+    
     const result: FileItem[] = [];
     const currentPathLength = currentPath.length;
     const seen = new Set<string>();
 
     // 遍历文件列表
-    for (const file of files) {
+    for (const file of fileList) {
       const filePath = file.name;
-
+      
       // 跳过不在当前目录的文件
       if (!filePath.startsWith(currentPath) && currentPath !== "") {
         continue;
@@ -48,39 +101,33 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
 
       // 获取相对于当前目录的文件路径
       const relativePath = currentPath === "" ? filePath : filePath.slice(currentPathLength);
-
-      // 如果文件不在当前目录下，跳过
+      
+      // 如果文件不在当前目录下或是当前目录本身，跳过
       if (relativePath === "") {
         continue;
       }
 
-      // 获取文件或目录名
-      const slashIndex = relativePath.indexOf("/");
-
-      // 如果没有斜杠，或者斜杠在末尾，则是当前目录的直接文件或子目录
-      if (slashIndex === -1 || (slashIndex === relativePath.length - 1 && relativePath.split("/").length - 1 === 1)) {
-        // 构建当前层级的文件名
-        const fileName = slashIndex === -1 ? relativePath : relativePath;
-
+      // 检查是否是子目录中的文件
+      const parts = relativePath.split('/');
+      
+      // 如果是当前目录下的文件或直接子目录
+      if (parts.length === 1 || (parts.length === 2 && parts[1] === '')) {
+        const fileName = relativePath;
+        
         // 如果已经添加过这个文件或目录，跳过
         if (seen.has(fileName)) {
           continue;
         }
-
+        
         seen.add(fileName);
-
+        
         // 创建一个新的文件项对象
         const fileItem: FileItem = {
           ...file,
           name: fileName,
           type: file.type
         };
-
-        // 对于子目录中的文件，需要特殊处理
-        if (slashIndex !== -1 && slashIndex !== relativePath.length - 1) {
-          continue; // 跳过子目录中的文件
-        }
-
+        
         result.push(fileItem);
       }
     }
@@ -111,20 +158,78 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
 
   if (files.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <File className="h-12 w-12 mb-4" />
-        <p className="text-lg">ファイルがありません</p>
-        <p className="text-sm">右下のボタンからファイルをアップロードしてください</p>
+      <div className="container p-4">
+        {currentPath && (
+          <div className="flex items-center flex-wrap gap-1 mb-2">
+            <Button
+              variant="ghost"
+              className="px-2 h-7"
+              onClick={() => setCurrentPath("")}
+            >
+              ルート/
+            </Button>
+            {currentPath.split('/').filter(Boolean).map((part, index, array) => (
+              index === array.length - 1 ? (
+                <span key={index} className="text-muted-foreground px-2">
+                  {part}/
+                </span>
+              ) : (
+                <Button
+                  key={index}
+                  variant="ghost"
+                  className="px-2 h-7"
+                  onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+                >
+                  {part}/
+                </Button>
+              )
+            ))}
+          </div>
+        )}
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <File className="h-12 w-12 mb-4" />
+          <p className="text-lg">ファイルがありません</p>
+          <p className="text-sm">右下のボタンからファイルをアップロードしてください</p>
+        </div>
       </div>
     )
   }
 
   if (filteredFiles.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <File className="h-12 w-12 mb-4" />
-        <p className="text-lg">検索結果がありません</p>
-        <p className="text-sm">検索条件を変更してお試しください</p>
+      <div className="container p-4">
+        {currentPath && (
+          <div className="flex items-center flex-wrap gap-1 mb-2">
+            <Button
+              variant="ghost"
+              className="px-2 h-7"
+              onClick={() => setCurrentPath("")}
+            >
+              ルート/
+            </Button>
+            {currentPath.split('/').filter(Boolean).map((part, index, array) => (
+              index === array.length - 1 ? (
+                <span key={index} className="text-muted-foreground px-2">
+                  {part}/
+                </span>
+              ) : (
+                <Button
+                  key={index}
+                  variant="ghost"
+                  className="px-2 h-7"
+                  onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+                >
+                  {part}/
+                </Button>
+              )
+            ))}
+          </div>
+        )}
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <File className="h-12 w-12 mb-4" />
+          <p className="text-lg">検索結果がありません</p>
+          <p className="text-sm">検索条件を変更してお試しください</p>
+        </div>
       </div>
     )
   }
