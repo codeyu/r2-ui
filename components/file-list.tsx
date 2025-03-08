@@ -148,14 +148,41 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
     return (
       <div className="container p-4">
         {currentPath && (
-          <Button
-            variant="ghost"
-            className="mb-4"
-            onClick={handleBackClick}
-          >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            戻る
-          </Button>
+          <div className="flex items-center gap-2 mb-4">
+            {/* 根目录 */}
+            <Button
+              variant="ghost"
+              className="px-2"
+              onClick={() => setCurrentPath("")}
+            >
+              ルート/
+            </Button>
+
+            {/* 中间路径 */}
+            {currentPath.split('/').filter(Boolean).map((part, index, array) => {
+              // 如果是最后一个（当前目录），不可点击
+              if (index === array.length - 1) {
+                return (
+                  <span key={index} className="text-muted-foreground">
+                    {part}/
+                  </span>
+                );
+              }
+
+              // 可点击的上级目录
+              return (
+                <div key={index} className="flex items-center">
+                  <Button
+                    variant="ghost"
+                    className="px-2"
+                    onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+                  >
+                    {part}/
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
         )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filteredFiles.map((file) => (
@@ -198,14 +225,41 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
   return (
     <div className="container p-4">
       {currentPath && (
-        <Button
-          variant="ghost"
-          className="mb-4"
-          onClick={handleBackClick}
-        >
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          戻る
-        </Button>
+        <div className="flex items-center gap-2 mb-4">
+          {/* 根目录 */}
+          <Button
+            variant="ghost"
+            className="px-2"
+            onClick={() => setCurrentPath("")}
+          >
+            ルート
+          </Button>
+
+          {/* 中间路径 */}
+          {currentPath.split('/').filter(Boolean).map((part, index, array) => {
+            // 如果是最后一个（当前目录），不可点击
+            if (index === array.length - 1) {
+              return (
+                <span key={index} className="text-muted-foreground">
+                  {part}/
+                </span>
+              );
+            }
+
+            // 可点击的上级目录
+            return (
+              <div key={index} className="flex items-center">
+                <Button
+                  variant="ghost"
+                  className="px-2"
+                  onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+                >
+                  {part}/
+                </Button>
+              </div>
+            );
+          })}
+        </div>
       )}
       <Table>
         <TableHeader>
