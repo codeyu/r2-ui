@@ -148,11 +148,11 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
     return (
       <div className="container p-4">
         {currentPath && (
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center flex-wrap gap-1 mb-2">
             {/* 根目录 */}
             <Button
               variant="ghost"
-              className="px-2"
+              className="px-2 h-7"
               onClick={() => setCurrentPath("")}
             >
               ルート/
@@ -163,7 +163,7 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
               // 如果是最后一个（当前目录），不可点击
               if (index === array.length - 1) {
                 return (
-                  <span key={index} className="text-muted-foreground">
+                  <span key={index} className="text-muted-foreground px-2">
                     {part}/
                   </span>
                 );
@@ -171,15 +171,14 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
 
               // 可点击的上级目录
               return (
-                <div key={index} className="flex items-center">
-                  <Button
-                    variant="ghost"
-                    className="px-2"
-                    onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
-                  >
-                    {part}/
-                  </Button>
-                </div>
+                <Button
+                  key={index}
+                  variant="ghost"
+                  className="px-2 h-7"
+                  onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+                >
+                  {part}/
+                </Button>
               );
             })}
           </div>
@@ -225,11 +224,11 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
   return (
     <div className="container p-4">
       {currentPath && (
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center flex-wrap gap-1 mb-2">
           {/* 根目录 */}
           <Button
             variant="ghost"
-            className="px-2"
+            className="px-2 h-7"
             onClick={() => setCurrentPath("")}
           >
             ルート
@@ -240,7 +239,7 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
             // 如果是最后一个（当前目录），不可点击
             if (index === array.length - 1) {
               return (
-                <span key={index} className="text-muted-foreground">
+                <span key={index} className="text-muted-foreground px-2">
                   {part}/
                 </span>
               );
@@ -248,15 +247,14 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
 
             // 可点击的上级目录
             return (
-              <div key={index} className="flex items-center">
-                <Button
-                  variant="ghost"
-                  className="px-2"
-                  onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
-                >
-                  {part}/
-                </Button>
-              </div>
+              <Button
+                key={index}
+                variant="ghost"
+                className="px-2 h-7"
+                onClick={() => setCurrentPath(array.slice(0, index + 1).join('/'))}
+              >
+                {part}/
+              </Button>
             );
           })}
         </div>
