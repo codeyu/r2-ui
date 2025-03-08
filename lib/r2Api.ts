@@ -50,6 +50,7 @@ export interface FileItem {
   size?: string;
   modified: string;
   fileType?: "document" | "image" | "archive" | "other";
+  r2Type?: string;
 }
 
 export const r2Api = {
@@ -68,7 +69,8 @@ export const r2Api = {
         type: obj.httpMetadata?.contentType === "application/x-directory" ? "folder" : "file",
         size: obj.httpMetadata?.contentType === "application/x-directory" ? "-" : formatFileSize(obj.size),
         modified: new Date(obj.uploaded).toLocaleString(),
-        fileType: getFileType(obj.httpMetadata?.contentType)
+        fileType: getFileType(obj.httpMetadata?.contentType),
+        r2Type: obj.httpMetadata?.contentType
       })) || [];
     } catch (error) {
       // 如果是取消操作，静默处理

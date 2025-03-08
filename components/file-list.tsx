@@ -32,23 +32,61 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
     };
   }, []); // 空依赖数组，只在组件挂载时执行
 
-  // 获取当前路径下的文件和文件夹
   const getCurrentFiles = () => {
-    return files.filter(file => {
-      // 如果是根目录
-      if (!currentPath) {
-        // 只显示根目录的文件和文件夹（不包含中间斜杠的项目）
-        return !file.name.slice(0, -1).includes('/');
+    const result: FileItem[] = [];
+    const currentPathLength = currentPath.length;
+    const seen = new Set<string>();
+
+    // 遍历文件列表
+    for (const file of files) {
+      const filePath = file.name;
+
+      // 跳过不在当前目录的文件
+      if (!filePath.startsWith(currentPath) && currentPath !== "") {
+        continue;
       }
-      
-      // 如果是子目录
-      const filePath = file.name.substring(0, file.name.lastIndexOf('/') || file.name.length);
-      return filePath === currentPath;
-    }).map(file => ({
-      ...file,
-      name: file.name.endsWith('/') ? file.name.slice(0, -1).split('/').pop() || file.name : file.name.split('/').pop() || file.name
-    }));
-  };
+
+      // 获取相对于当前目录的文件路径
+      const relativePath = currentPath === "" ? filePath : filePath.slice(currentPathLength);
+
+      // 如果文件不在当前目录下，跳过
+      if (relativePath === "") {
+        continue;
+      }
+
+      // 获取文件或目录名
+      const slashIndex = relativePath.indexOf("/");
+
+      // 如果没有斜杠，或者斜杠在末尾，则是当前目录的直接文件或子目录
+      if (slashIndex === -1 || (slashIndex === relativePath.length - 1 && relativePath.split("/").length - 1 === 1)) {
+        // 构建当前层级的文件名
+        const fileName = slashIndex === -1 ? relativePath : relativePath;
+
+        // 如果已经添加过这个文件或目录，跳过
+        if (seen.has(fileName)) {
+          continue;
+        }
+
+        seen.add(fileName);
+
+        // 创建一个新的文件项对象
+        const fileItem: FileItem = {
+          ...file,
+          name: fileName,
+          type: file.type
+        };
+
+        // 对于子目录中的文件，需要特殊处理
+        if (slashIndex !== -1 && slashIndex !== relativePath.length - 1) {
+          continue; // 跳过子目录中的文件
+        }
+
+        result.push(fileItem);
+      }
+    }
+
+    return result;
+  }
 
   const filteredFiles = getCurrentFiles().filter((file) =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -56,7 +94,11 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
 
   // 处理文件夹双击
   const handleFolderDoubleClick = (folderName: string) => {
-    const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+    // 确保当前路径以 / 结尾
+    if (folderName && !folderName.endsWith("/")) {
+      folderName += "/";
+    }
+    const newPath = currentPath ? `${currentPath}${folderName}` : folderName;
     setCurrentPath(newPath);
   };
 
@@ -117,8 +159,8 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
         )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filteredFiles.map((file) => (
-            <Card 
-              key={file.name} 
+            <Card
+              key={file.name}
               className="overflow-hidden"
               onDoubleClick={() => file.type === "folder" && handleFolderDoubleClick(file.name)}
             >
@@ -169,14 +211,15 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
         <TableHeader>
           <TableRow>
             <TableHead className="w-[300px]">名前</TableHead>
-            <TableHead>更新日</TableHead>
+            <TableHead>タイプ</TableHead>
             <TableHead>サイズ</TableHead>
+            <TableHead>更新日</TableHead>
             <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filteredFiles.map((file) => (
-            <TableRow 
+            <TableRow
               key={file.name}
               onDoubleClick={() => file.type === "folder" && handleFolderDoubleClick(file.name)}
               className={file.type === "folder" ? "cursor-pointer" : ""}
@@ -187,8 +230,9 @@ export function FileList({ viewMode, searchQuery, files, onRefresh }: FileListPr
                   <span>{file.name}</span>
                 </div>
               </TableCell>
-              <TableCell>{file.modified}</TableCell>
+              <TableCell>{file.r2Type || "-"}</TableCell>
               <TableCell>{file.size || "-"}</TableCell>
+              <TableCell>{file.modified}</TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

@@ -189,34 +189,6 @@ export function UploadButton({ onUploadComplete }: UploadButtonProps) {
             setShowCancelDialog(true)
           }}
         >
-          <svg
-            className="absolute inset-0 w-full h-full -rotate-90"
-            viewBox="0 0 56 56"
-          >
-            {/* 背景圆环 */}
-            <circle
-              className="text-muted-foreground/20"
-              cx="28"
-              cy="28"
-              r="24"
-              strokeWidth="3"
-              fill="none"
-              stroke="currentColor"
-            />
-            {/* 进度圆环 */}
-            <circle
-              className="text-primary transition-all duration-300 ease-in-out"
-              cx="28"
-              cy="28"
-              r="24"
-              strokeWidth="3"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 24}`}
-              strokeDashoffset={`${2 * Math.PI * 24 * (1 - uploadProgress / 100)}`}
-            />
-          </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-sm font-medium mb-1">
               {Math.round(uploadProgress)}%
