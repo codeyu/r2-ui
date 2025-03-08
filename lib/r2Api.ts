@@ -74,7 +74,7 @@ export const r2Api = {
       })) || [];
     } catch (error) {
       // 如果是取消操作，静默处理
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         return [];
       }
       throw error;
